@@ -50,3 +50,51 @@ if not os.path.exists(IMG_DIR):
 mnist = input_data.read_data_sets(DATA_DIR, one_hot=True)
 x_ph = tf.placeholder(tf.float32, [M, 784])
 
+# Generator
+def generative_network(eps):
+  h1 = slim.fully_connected(eps, 128, activation_fn=tf.nn.relu)
+  x = slim.fully_connected(h1, 784, activation_fn=tf.sigmoid)
+  return x
+
+# Discriminator
+def discriminative_network(x):
+  """Outputs probability in logits."""
+  h1 = slim.fully_connected(x, 128, activation_fn=tf.nn.relu)
+  logit = slim.fully_connected(h1, 1, activation_fn=None)
+  return logit
+
+# Model
+with tf.variable_scope("Gen"):
+  eps = Uniform(a=tf.zeros([M, d]) - 1.0, b=tf.ones([M, d]))
+  x = generative_network(eps)
+
+# INference
+optimizer = tf.train.AdamOptimizer()
+optimizer_d = tf.train.AdamOptimizer()
+
+inference = ed.GANInference(
+    data={x: x_ph}, discriminator=discriminative_network)
+inference.initialize(
+    optimizer=optimizer, optimizer_d=optimizer_d,
+    n_iter=15000, n_print=1000)
+
+sess = ed.get_session()
+tf.global_variables_initializer().run()
+
+idx = np.random.randint(M, size=16)
+i = 0
+# Main loop
+for t in range(inference.n_iter):
+  if t % inference.n_print == 0:
+    samples = sess.run(x)
+    samples = samples[idx, ]
+
+    fig = plot(samples)
+    plt.savefig(os.path.join(IMG_DIR, '{}.png').format(
+        str(i).zfill(3)), bbox_inches='tight')
+    plt.close(fig)
+    i += 1
+
+  x_batch, _ = mnist.train.next_batch(M)
+  info_dict = inference.update(feed_dict={x_ph: x_batch})
+  inference.print_progress(info_dict)
